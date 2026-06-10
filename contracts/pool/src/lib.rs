@@ -4,6 +4,7 @@ use soroban_sdk::{contract, contractimpl, panic_with_error, token, Address, Byte
 
 mod errors;
 mod events;
+mod test;
 mod types;
 
 pub use errors::*;
