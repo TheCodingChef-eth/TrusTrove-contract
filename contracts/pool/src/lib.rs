@@ -398,11 +398,9 @@ impl PoolContract {
             .get(&DataKey::TotalFunded)
             .unwrap_or(0);
         let available = total_deposits - total_funded;
-        let utilization = if total_deposits > 0 {
-            (total_funded * 10000 / total_deposits) as u32
-        } else {
-            0
-        };
+        let utilization = (total_funded * 10000)
+            .checked_div(total_deposits)
+            .unwrap_or(0) as u32;
         let total_yield: u128 = env
             .storage()
             .instance()

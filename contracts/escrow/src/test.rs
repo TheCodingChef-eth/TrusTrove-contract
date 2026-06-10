@@ -46,7 +46,7 @@ fn setup() -> (
     let admin = Address::generate(&env);
     let pool = Address::generate(&env);
     let usdc_id = env.register_contract(None, MockToken);
-    let mock_token = MockTokenClient::new(&env, &usdc_id);
+    let _mock_token = MockTokenClient::new(&env, &usdc_id);
 
     let pool_bal_key = BalanceKey(pool.clone());
     env.storage()

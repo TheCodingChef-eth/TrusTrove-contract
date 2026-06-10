@@ -4,7 +4,7 @@ use soroban_sdk::{
     contract, contractimpl, contracttype, testutils::Address as _, Address, BytesN, Env,
 };
 
-use crate::{LPPosition, PoolContract, PoolContractClient, PoolStats};
+use crate::{PoolContract, PoolContractClient};
 
 use trusttrove_escrow::{EscrowContract as RealEscrow, EscrowContractClient as RealEscrowClient};
 use trusttrove_invoice::{
@@ -68,10 +68,6 @@ struct TestEnv {
     env: Env,
     pool: PoolContractClient<'static>,
     invoice: RealInvoiceClient<'static>,
-    invoice_id: Address,
-    escrow_id: Address,
-    usdc_id: Address,
-    admin: Address,
     issuer: Address,
     buyer: Address,
     lp: Address,
@@ -121,10 +117,6 @@ fn setup() -> TestEnv {
         env,
         pool,
         invoice,
-        invoice_id,
-        escrow_id,
-        usdc_id,
-        admin,
         issuer,
         buyer,
         lp,
