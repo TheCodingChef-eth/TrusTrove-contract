@@ -1,6 +1,8 @@
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, panic_with_error, Address, BytesN, Env};
+use soroban_sdk::{
+    contract, contractimpl, panic_with_error, token, Address, Bytes, BytesN, Env, Symbol, Vec,
+};
 
 mod errors;
 mod events;
@@ -20,7 +22,9 @@ impl InvoiceContract {
         }
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
-        env.storage().instance().set(&DataKey::RegistryContract, &registry_contract);
+        env.storage()
+            .instance()
+            .set(&DataKey::RegistryContract, &registry_contract);
         env.storage().instance().set(&DataKey::Counter, &0u64);
     }
 
@@ -31,6 +35,423 @@ impl InvoiceContract {
             .get(&DataKey::Admin)
             .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound));
         admin.require_auth();
-        env.storage().instance().set(&DataKey::PoolContract, &pool_contract);
+        env.storage()
+            .instance()
+            .set(&DataKey::PoolContract, &pool_contract);
     }
+
+    pub fn create(
+        env: Env,
+        issuer: Address,
+        buyer: Address,
+        face_value: u128,
+        due_date: u64,
+    ) -> BytesN<32> {
+        issuer.require_auth();
+
+        let registry_id: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::RegistryContract)
+            .unwrap();
+
+        let issuer_verified: bool = env.invoke_contract(
+            &registry_id,
+            &Symbol::new(&env, "is_verified"),
+            (issuer.clone(),),
+        );
+        if !issuer_verified {
+            panic_with_error!(&env, InvoiceError::IssuerNotVerified);
+        }
+
+        let buyer_verified: bool = env.invoke_contract(
+            &registry_id,
+            &Symbol::new(&env, "is_verified"),
+            (buyer.clone(),),
+        );
+        if !buyer_verified {
+            panic_with_error!(&env, InvoiceError::BuyerNotVerified);
+        }
+
+        if face_value == 0 {
+            panic_with_error!(&env, InvoiceError::InvalidFaceValue);
+        }
+        if due_date <= env.ledger().timestamp() {
+            panic_with_error!(&env, InvoiceError::InvalidDueDate);
+        }
+
+        let counter: u64 = env.storage().instance().get(&DataKey::Counter).unwrap();
+        let next_counter = counter + 1;
+        env.storage().instance().set(&DataKey::Counter, &next_counter);
+
+        let now = env.ledger().timestamp();
+        let mut hash_input = Bytes::new(&env);
+        for i in 0..32 {
+            hash_input.push_back(issuer.to_xdr(&env).get(i).unwrap());
+        }
+        for i in 0..32 {
+            hash_input.push_back(buyer.to_xdr(&env).get(i).unwrap());
+        }
+        for b in face_value.to_be_bytes() {
+            hash_input.push_back(b);
+        }
+        for b in due_date.to_be_bytes() {
+            hash_input.push_back(b);
+        }
+        for b in counter.to_be_bytes() {
+            hash_input.push_back(b);
+        }
+        let invoice_id = env.crypto().sha256(&hash_input);
+
+        let invoice = Invoice {
+            id: invoice_id.clone(),
+            issuer: issuer.clone(),
+            buyer: buyer.clone(),
+            face_value,
+            discount_bps: 0,
+            funded_amount: 0,
+            due_date,
+            status: InvoiceStatus::Created,
+            created_at: now,
+            funded_at: None,
+            shipped_at: None,
+            issuer_confirmed: false,
+            buyer_confirmed: false,
+            repaid_at: None,
+        };
+
+        let inv_key = DataKey::Invoice(invoice_id.clone());
+        env.storage().persistent().set(&inv_key, &invoice);
+        env.storage().persistent().extend_ttl(&inv_key, 100, 2_000_000);
+
+        self::extend_index(&env, &DataKey::InvoicesByIssuer(issuer), &invoice_id);
+        self::extend_index(&env, &DataKey::InvoicesByBuyer(buyer), &invoice_id);
+        self::extend_index(
+            &env,
+            &DataKey::InvoicesByStatus(InvoiceStatus::Created as u32),
+            &invoice_id,
+        );
+
+        events::invoice_created(&env, &invoice_id, &invoice.issuer, &invoice.buyer, &face_value);
+        invoice_id
+    }
+
+    pub fn list_for_financing(
+        env: Env,
+        invoice_id: BytesN<32>,
+        discount_bps: u32,
+    ) -> bool {
+        let inv_key = DataKey::Invoice(invoice_id.clone());
+        let mut invoice: Invoice = env
+            .storage()
+            .persistent()
+            .get(&inv_key)
+            .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound));
+        invoice.issuer.require_auth();
+        if invoice.status != InvoiceStatus::Created {
+            panic_with_error!(&env, InvoiceError::InvalidStatusTransition);
+        }
+        if discount_bps > 5000 {
+            panic_with_error!(&env, InvoiceError::DiscountTooHigh);
+        }
+        invoice.status = InvoiceStatus::Listed;
+        invoice.discount_bps = discount_bps;
+        env.storage().persistent().set(&inv_key, &invoice);
+        env.storage().persistent().extend_ttl(&inv_key, 100, 2_000_000);
+
+        self::move_status_index(&env, &invoice_id, InvoiceStatus::Created, InvoiceStatus::Listed);
+        events::invoice_listed(&env, &invoice_id, &discount_bps);
+        true
+    }
+
+    pub fn mark_funded(
+        env: Env,
+        invoice_id: BytesN<32>,
+        funded_amount: u128,
+    ) -> bool {
+        let pool: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::PoolContract)
+            .unwrap();
+        pool.require_auth();
+
+        let inv_key = DataKey::Invoice(invoice_id.clone());
+        let mut invoice: Invoice = env
+            .storage()
+            .persistent()
+            .get(&inv_key)
+            .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound));
+        if invoice.status != InvoiceStatus::Listed {
+            panic_with_error!(&env, InvoiceError::InvalidStatusTransition);
+        }
+        invoice.status = InvoiceStatus::Funded;
+        invoice.funded_amount = funded_amount;
+        invoice.funded_at = Some(env.ledger().timestamp());
+        env.storage().persistent().set(&inv_key, &invoice);
+        env.storage().persistent().extend_ttl(&inv_key, 100, 2_000_000);
+
+        self::move_status_index(&env, &invoice_id, InvoiceStatus::Listed, InvoiceStatus::Funded);
+        events::invoice_funded(&env, &invoice_id, &funded_amount);
+        true
+    }
+
+    pub fn mark_shipped(env: Env, invoice_id: BytesN<32>) -> bool {
+        let inv_key = DataKey::Invoice(invoice_id.clone());
+        let mut invoice: Invoice = env
+            .storage()
+            .persistent()
+            .get(&inv_key)
+            .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound));
+        invoice.issuer.require_auth();
+        if invoice.status != InvoiceStatus::Funded {
+            panic_with_error!(&env, InvoiceError::InvalidStatusTransition);
+        }
+        invoice.status = InvoiceStatus::Active;
+        invoice.shipped_at = Some(env.ledger().timestamp());
+        env.storage().persistent().set(&inv_key, &invoice);
+        env.storage().persistent().extend_ttl(&inv_key, 100, 2_000_000);
+
+        self::move_status_index(&env, &invoice_id, InvoiceStatus::Funded, InvoiceStatus::Active);
+        events::invoice_shipped(&env, &invoice_id);
+        true
+    }
+
+    pub fn confirm_delivery(
+        env: Env,
+        invoice_id: BytesN<32>,
+        confirmer: Address,
+    ) -> bool {
+        confirmer.require_auth();
+
+        let inv_key = DataKey::Invoice(invoice_id.clone());
+        let mut invoice: Invoice = env
+            .storage()
+            .persistent()
+            .get(&inv_key)
+            .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound));
+        if invoice.status != InvoiceStatus::Active {
+            panic_with_error!(&env, InvoiceError::InvalidStatusTransition);
+        }
+        if confirmer != invoice.issuer && confirmer != invoice.buyer {
+            panic_with_error!(&env, InvoiceError::NotAuthorized);
+        }
+
+        if confirmer == invoice.issuer {
+            if invoice.issuer_confirmed {
+                panic_with_error!(&env, InvoiceError::AlreadyConfirmed);
+            }
+            invoice.issuer_confirmed = true;
+        }
+        if confirmer == invoice.buyer {
+            if invoice.buyer_confirmed {
+                panic_with_error!(&env, InvoiceError::AlreadyConfirmed);
+            }
+            invoice.buyer_confirmed = true;
+        }
+
+        if invoice.issuer_confirmed && invoice.buyer_confirmed {
+            invoice.status = InvoiceStatus::Confirmed;
+            self::move_status_index(
+                &env,
+                &invoice_id,
+                InvoiceStatus::Active,
+                InvoiceStatus::Confirmed,
+            );
+            events::both_confirmed(&env, &invoice_id);
+        }
+
+        env.storage().persistent().set(&inv_key, &invoice);
+        env.storage().persistent().extend_ttl(&inv_key, 100, 2_000_000);
+        events::delivery_confirmed(&env, &invoice_id, &confirmer);
+        true
+    }
+
+    pub fn repay(env: Env, invoice_id: BytesN<32>) -> bool {
+        let inv_key = DataKey::Invoice(invoice_id.clone());
+        let invoice: Invoice = env
+            .storage()
+            .persistent()
+            .get(&inv_key)
+            .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound));
+        invoice.buyer.require_auth();
+        if invoice.status != InvoiceStatus::Confirmed {
+            panic_with_error!(&env, InvoiceError::InvalidStatusTransition);
+        }
+
+        let pool: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::PoolContract)
+            .unwrap();
+
+        let usdc_asset: Address = env.invoke_contract(
+            &pool,
+            &Symbol::new(&env, "get_usdc_asset"),
+            (),
+        );
+
+        let usdc = token::Client::new(&env, &usdc_asset);
+        usdc.transfer(&invoice.buyer, &pool, &(invoice.face_value as i128));
+
+        let _: bool = env.invoke_contract(
+            &pool,
+            &Symbol::new(&env, "receive_repayment"),
+            (invoice_id.clone(), invoice.face_value),
+        );
+
+        let mut updated = invoice;
+        updated.status = InvoiceStatus::Repaid;
+        updated.repaid_at = Some(env.ledger().timestamp());
+        env.storage().persistent().set(&inv_key, &updated);
+        env.storage().persistent().extend_ttl(&inv_key, 100, 2_000_000);
+
+        self::move_status_index(
+            &env,
+            &invoice_id,
+            InvoiceStatus::Confirmed,
+            InvoiceStatus::Repaid,
+        );
+        events::invoice_repaid(&env, &invoice_id, &updated.face_value);
+        true
+    }
+
+    pub fn trigger_default(env: Env, invoice_id: BytesN<32>) -> bool {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound));
+        admin.require_auth();
+
+        let inv_key = DataKey::Invoice(invoice_id.clone());
+        let mut invoice: Invoice = env
+            .storage()
+            .persistent()
+            .get(&inv_key)
+            .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound));
+
+        let valid_transition = invoice.status == InvoiceStatus::Funded
+            || invoice.status == InvoiceStatus::Active
+            || invoice.status == InvoiceStatus::Confirmed;
+        if !valid_transition {
+            panic_with_error!(&env, InvoiceError::InvalidStatusTransition);
+        }
+        if env.ledger().timestamp() <= invoice.due_date {
+            panic_with_error!(&env, InvoiceError::DueDateNotPassed);
+        }
+
+        let prev_status = invoice.status.clone();
+        invoice.status = InvoiceStatus::Defaulted;
+        env.storage().persistent().set(&inv_key, &invoice);
+        env.storage().persistent().extend_ttl(&inv_key, 100, 2_000_000);
+
+        self::move_status_index(&env, &invoice_id, &prev_status, &InvoiceStatus::Defaulted);
+
+        let pool: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::PoolContract)
+            .unwrap();
+        let _: bool = env.invoke_contract(
+            &pool,
+            &Symbol::new(&env, "handle_default"),
+            (invoice_id.clone(),),
+        );
+        events::invoice_defaulted(&env, &invoice_id);
+        true
+    }
+
+    pub fn get(env: Env, invoice_id: BytesN<32>) -> Invoice {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Invoice(invoice_id))
+            .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound))
+    }
+
+    pub fn get_by_status(env: Env, status: InvoiceStatus) -> Vec<Invoice> {
+        let ids: Vec<BytesN<32>> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::InvoicesByStatus(status as u32))
+            .unwrap_or(Vec::new(&env));
+        let mut result: Vec<Invoice> = Vec::new(&env);
+        for i in 0..ids.len() {
+            let id = ids.get(i).unwrap();
+            let invoice: Invoice = env.storage().persistent().get(&DataKey::Invoice(id)).unwrap();
+            result.push_back(invoice);
+        }
+        result
+    }
+
+    pub fn get_by_issuer(env: Env, address: Address) -> Vec<Invoice> {
+        let ids: Vec<BytesN<32>> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::InvoicesByIssuer(address))
+            .unwrap_or(Vec::new(&env));
+        let mut result: Vec<Invoice> = Vec::new(&env);
+        for i in 0..ids.len() {
+            let id = ids.get(i).unwrap();
+            let invoice: Invoice = env.storage().persistent().get(&DataKey::Invoice(id)).unwrap();
+            result.push_back(invoice);
+        }
+        result
+    }
+
+    pub fn get_by_buyer(env: Env, address: Address) -> Vec<Invoice> {
+        let ids: Vec<BytesN<32>> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::InvoicesByBuyer(address))
+            .unwrap_or(Vec::new(&env));
+        let mut result: Vec<Invoice> = Vec::new(&env);
+        for i in 0..ids.len() {
+            let id = ids.get(i).unwrap();
+            let invoice: Invoice = env.storage().persistent().get(&DataKey::Invoice(id)).unwrap();
+            result.push_back(invoice);
+        }
+        result
+    }
+}
+
+fn extend_index(env: &Env, key: &DataKey, invoice_id: &BytesN<32>) {
+    let mut ids: Vec<BytesN<32>> = env
+        .storage()
+        .persistent()
+        .get(key)
+        .unwrap_or(Vec::new(env));
+    ids.push_back(invoice_id.clone());
+    env.storage().persistent().set(key, &ids);
+    env.storage().persistent().extend_ttl(key, 100, 2_000_000);
+}
+
+fn move_status_index(
+    env: &Env,
+    invoice_id: &BytesN<32>,
+    from: &InvoiceStatus,
+    to: &InvoiceStatus,
+) {
+    let from_key = DataKey::InvoicesByStatus(from.clone() as u32);
+    let mut from_ids: Vec<BytesN<32>> = env
+        .storage()
+        .persistent()
+        .get(&from_key)
+        .unwrap_or(Vec::new(env));
+    from_ids = from_ids
+        .iter()
+        .filter(|id| *id != *invoice_id)
+        .collect();
+    env.storage().persistent().set(&from_key, &from_ids);
+    env.storage().persistent().extend_ttl(&from_key, 100, 2_000_000);
+
+    let to_key = DataKey::InvoicesByStatus(to.clone() as u32);
+    let mut to_ids: Vec<BytesN<32>> = env
+        .storage()
+        .persistent()
+        .get(&to_key)
+        .unwrap_or(Vec::new(env));
+    to_ids.push_back(invoice_id.clone());
+    env.storage().persistent().set(&to_key, &to_ids);
+    env.storage().persistent().extend_ttl(&to_key, 100, 2_000_000);
 }
