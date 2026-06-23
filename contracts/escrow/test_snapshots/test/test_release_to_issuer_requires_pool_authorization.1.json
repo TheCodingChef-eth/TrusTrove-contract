@@ -1,6 +1,6 @@
 {
   "generators": {
-    "address": 4,
+    "address": 5,
     "nonce": 0
   },
   "auth": [
@@ -590,32 +590,6 @@
       "event": {
         "ext": "v0",
         "contract_id": "0000000000000000000000000000000000000000000000000000000000000004",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "funds_locked"
-              },
-              {
-                "bytes": "0000000000000000000000000000000000000000000000000000000000000000"
-              }
-            ],
-            "data": {
-              "u128": {
-                "hi": 0,
-                "lo": 1000000000
-              }
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "0000000000000000000000000000000000000000000000000000000000000004",
         "type_": "diagnostic",
         "body": {
           "v0": {
@@ -650,7 +624,7 @@
                 "bytes": "0000000000000000000000000000000000000000000000000000000000000004"
               },
               {
-                "symbol": "lock"
+                "symbol": "release_to_issuer"
               }
             ],
             "data": {
@@ -659,10 +633,7 @@
                   "bytes": "0000000000000000000000000000000000000000000000000000000000000000"
                 },
                 {
-                  "u128": {
-                    "hi": 0,
-                    "lo": 500000000
-                  }
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 }
               ]
             }
@@ -684,17 +655,17 @@
               },
               {
                 "error": {
-                  "contract": 4
+                  "auth": "invalid_action"
                 }
               }
             ],
             "data": {
               "vec": [
                 {
-                  "string": "failing with contract error"
+                  "string": "Unauthorized function call for address"
                 },
                 {
-                  "u32": 4
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 }
               ]
             }
@@ -716,7 +687,7 @@
               },
               {
                 "error": {
-                  "contract": 4
+                  "auth": "invalid_action"
                 }
               }
             ],
@@ -741,7 +712,7 @@
               },
               {
                 "error": {
-                  "contract": 4
+                  "auth": "invalid_action"
                 }
               }
             ],
@@ -766,7 +737,7 @@
               },
               {
                 "error": {
-                  "contract": 4
+                  "auth": "invalid_action"
                 }
               }
             ],
@@ -776,7 +747,7 @@
                   "string": "contract call failed"
                 },
                 {
-                  "symbol": "lock"
+                  "symbol": "release_to_issuer"
                 },
                 {
                   "vec": [
@@ -784,10 +755,7 @@
                       "bytes": "0000000000000000000000000000000000000000000000000000000000000000"
                     },
                     {
-                      "u128": {
-                        "hi": 0,
-                        "lo": 500000000
-                      }
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                     }
                   ]
                 }
@@ -811,7 +779,7 @@
               },
               {
                 "error": {
-                  "contract": 4
+                  "auth": "invalid_action"
                 }
               }
             ],
