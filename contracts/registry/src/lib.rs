@@ -31,6 +31,7 @@ impl RegistryContract {
     /// ```ignore
     /// client.initialize(&admin);
     
+
     /// ```
     pub fn initialize(env: Env, admin: Address) {
         if env.storage().instance().has(&DataKey::Admin) {
