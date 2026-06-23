@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Locate `stellar` CLI: prefer system PATH, fallback to common WSL install path
+# Prefer a globally available `stellar` on PATH, fall back to a common WSL installation
 if command -v stellar &> /dev/null; then
   STELLAR="stellar"
 elif [ -f "/mnt/c/Program Files (x86)/Stellar CLI/stellar.exe" ]; then
