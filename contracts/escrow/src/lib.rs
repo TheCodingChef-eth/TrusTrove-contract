@@ -219,36 +219,27 @@ impl EscrowContract {
         true
     }
 
-    pub fn handle_default(env: Env, invoice_id: BytesN<32>) -> bool {
-        /// Handles an escrow default by returning the locked funds to the pool.
-        ///
-        /// # Arguments
-        /// * `env` - The Soroban environment.
-        /// * `invoice_id` - The invoice with a defaulted escrow lock.
-        ///
-        /// # Returns
-        /// * `bool` - `true` if default handling completed, `false` if no lock exists.
-        ///
-        /// # Example
-        /// ```ignore
-        /// let result = client.handle_default(&invoice_id);
-        /// ```
+    pub fn handle_default(env: Env, invoice_id: BytesN<32>, caller: Address) -> bool {
         let key = DataKey::Locked(invoice_id.clone());
         if !env.storage().persistent().has(&key) {
             return false;
         }
 
-        let _admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
         let pool: Address = env
             .storage()
             .instance()
             .get(&DataKey::PoolContract)
             .unwrap();
 
-        // Try admin auth first; if that's not the caller, try pool
-        // In Soroban, we can't easily catch require_auth failures,
-        // so we require the pool to auth (the common case)
-        pool.require_auth();
+        // Require the caller to authenticate themselves, then verify they are
+        // either the admin (emergency/recovery path) or the pool contract
+        // (normal operational path).  Using an explicit `caller` parameter is
+        // the idiomatic Soroban pattern for "one of N authorised parties".
+        caller.require_auth();
+        if caller != admin && caller != pool {
+            panic_with_error!(&env, EscrowError::NotAuthorized);
+        }
 
         let record: EscrowRecord = env.storage().persistent().get(&key).unwrap();
         let usdc_id: Address = env.storage().instance().get(&DataKey::UsdcAsset).unwrap();
