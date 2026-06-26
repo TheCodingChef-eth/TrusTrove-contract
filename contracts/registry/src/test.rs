@@ -1,11 +1,9 @@
 #![cfg(test)]
 
-use crate::{RegistryContract, RegistryContractClient};
+use crate::{DataKey, Profile, RegistryContract, RegistryContractClient, Role, VerificationStatus};
 use proptest::prelude::*;
 use proptest::test_runner::{Config as ProptestConfig, TestRunner};
 use soroban_sdk::{map, testutils::Address as _, vec, Address, Env, String, Vec};
-
-use crate::VerificationStatus;
 
 fn setup() -> (Env, RegistryContractClient<'static>) {
     let env = Env::default();
