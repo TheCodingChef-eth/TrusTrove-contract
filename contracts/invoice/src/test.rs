@@ -88,6 +88,7 @@ fn setup() -> Setup {
     client.initialize(&admin, &registry_id);
 
     let usdc_asset = Address::generate(&env);
+    client.add_supported_asset(&usdc_asset);
 
     (env, client, issuer, buyer, registry_client, usdc_asset)
 }
@@ -459,6 +460,7 @@ fn test_create_invoice_with_xlm_asset() {
     let (env, client, issuer, buyer, _, _usdc) = setup();
     let due_date = env.ledger().timestamp() + 86400;
     let xlm_asset = Address::generate(&env);
+    client.add_supported_asset(&xlm_asset);
 
     let invoice_id = client.create(&issuer, &buyer, &1_000_000_000, &due_date, &xlm_asset);
     let invoice = client.get(&invoice_id);
@@ -855,4 +857,85 @@ fn prop_expiry_window_bounds_are_respected_across_values() {
             Ok(())
         })
         .unwrap();
+}
+
+// ============== SUPPORTED ASSET TESTS ==============
+
+#[test]
+fn test_add_supported_asset() {
+    let (env, client, _, _, _, _) = setup();
+    let asset = Address::generate(&env);
+
+    assert!(!client.is_supported_asset(&asset));
+    client.add_supported_asset(&asset);
+    assert!(client.is_supported_asset(&asset));
+    assert_eq!(client.get_supported_asset_count(), 2);
+}
+
+#[test]
+fn test_add_supported_asset_idempotent() {
+    let (_env, client, _, _, _, usdc) = setup();
+
+    assert!(client.is_supported_asset(&usdc));
+    client.add_supported_asset(&usdc);
+    assert!(client.is_supported_asset(&usdc));
+    assert_eq!(client.get_supported_asset_count(), 1);
+}
+
+#[test]
+fn test_remove_supported_asset() {
+    let (env, client, _, _, _, usdc) = setup();
+    let asset = Address::generate(&env);
+    client.add_supported_asset(&asset);
+    assert_eq!(client.get_supported_asset_count(), 2);
+
+    client.remove_supported_asset(&asset);
+    assert!(!client.is_supported_asset(&asset));
+    assert_eq!(client.get_supported_asset_count(), 1);
+
+    assert!(client.is_supported_asset(&usdc));
+}
+
+#[test]
+fn test_remove_supported_asset_idempotent() {
+    let (env, client, _, _, _, _) = setup();
+    let asset = Address::generate(&env);
+
+    client.remove_supported_asset(&asset);
+    assert!(!client.is_supported_asset(&asset));
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #13)")]
+fn test_create_fails_unsupported_asset() {
+    let (env, client, issuer, buyer, _, _) = setup();
+    let due_date = env.ledger().timestamp() + 86400;
+    let unsupported = Address::generate(&env);
+
+    client.create(&issuer, &buyer, &1_000_000_000, &due_date, &unsupported);
+}
+
+#[test]
+fn test_create_succeeds_with_supported_asset() {
+    let (env, client, issuer, buyer, _, usdc) = setup();
+    let due_date = env.ledger().timestamp() + 86400;
+
+    let invoice_id = client.create(&issuer, &buyer, &1_000_000_000, &due_date, &usdc);
+    let invoice = client.get(&invoice_id);
+    assert_eq!(invoice.funding_asset, usdc);
+}
+
+#[test]
+fn test_add_then_remove_then_create_fails() {
+    let (env, client, issuer, buyer, _, _) = setup();
+    let due_date = env.ledger().timestamp() + 86400;
+    let asset = Address::generate(&env);
+
+    client.add_supported_asset(&asset);
+    let invoice_id = client.create(&issuer, &buyer, &1_000_000_000, &due_date, &asset);
+    let invoice = client.get(&invoice_id);
+    assert_eq!(invoice.funding_asset, asset);
+
+    client.remove_supported_asset(&asset);
+    assert!(!client.is_supported_asset(&asset));
 }
