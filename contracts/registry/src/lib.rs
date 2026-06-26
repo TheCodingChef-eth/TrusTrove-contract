@@ -234,22 +234,18 @@ impl RegistryContract {
             .unwrap_or(false)
     }
 
-    /// Revokes verification for a registered profile.
-    ///
-    /// # Arguments
-    /// * `env` - The Soroban environment.
-    /// * `address` - The address to revoke.
-    ///
-    /// # Returns
-    /// * `bool` - `true` when revocation succeeds.
-    ///
-    /// # Panics
-    /// * `NotFound` if the admin or the profile address is missing.
-    ///
-    /// # Example
-    /// ```ignore
-    /// let result = client.revoke(&address);
-    /// ```
+    pub fn get_verification_status(env: Env, address: Address) -> VerificationStatus {
+        match env
+            .storage()
+            .persistent()
+            .get::<_, Profile>(&DataKey::Profile(address))
+        {
+            None => VerificationStatus::Unregistered,
+            Some(p) if p.verified => VerificationStatus::Verified,
+            Some(_) => VerificationStatus::Revoked,
+        }
+    }
+
     pub fn revoke(env: Env, address: Address) -> bool {
         let admin: Address = env
             .storage()
