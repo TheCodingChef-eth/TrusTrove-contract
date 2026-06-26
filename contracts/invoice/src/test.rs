@@ -2,8 +2,7 @@
 
 use soroban_sdk::{
     contract, contractimpl, contracttype,
-    testutils::Ledger,
-    testutils::{Address as _, Events as _},
+    testutils::{Address as _, Events as _, Ledger},
     vec, Address, BytesN, Env, IntoVal, Symbol,
 };
 
