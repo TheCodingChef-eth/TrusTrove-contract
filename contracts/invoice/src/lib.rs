@@ -763,7 +763,9 @@ impl InvoiceContract {
                     .persistent()
                     .get(&DataKey::Invoice(id))
                     .unwrap();
-                result.push_back(invoice);
+                if invoice.status == status {
+                    result.push_back(invoice);
+                }
             }
         }
         result
