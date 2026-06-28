@@ -490,14 +490,14 @@ fn test_expire_listing_succeeds_by_issuer() {
     env.ledger()
         .set_timestamp(env.ledger().timestamp() + 7 * 24 * 60 * 60 + 1);
 
-    let result = client.expire_listing(&invoice_id, &issuer);
+    let result = client.expire_listing(&invoice_id);
     assert!(result);
     assert_eq!(client.get(&invoice_id).status, InvoiceStatus::Expired);
 }
 
 #[test]
 fn test_expire_listing_succeeds_by_admin() {
-    let (env, client, issuer, buyer, _, usdc, admin) = setup_with_admin();
+    let (env, client, issuer, buyer, _, usdc, _admin) = setup_with_admin();
     let due_date = env.ledger().timestamp() + 86400;
     let invoice_id = client.create(&issuer, &buyer, &1_000_000_000, &due_date, &usdc);
     client.list_for_financing(&invoice_id, &200);
@@ -505,7 +505,7 @@ fn test_expire_listing_succeeds_by_admin() {
     env.ledger()
         .set_timestamp(env.ledger().timestamp() + 7 * 24 * 60 * 60 + 1);
 
-    let result = client.expire_listing(&invoice_id, &admin);
+    let result = client.expire_listing(&invoice_id);
     assert!(result);
     assert_eq!(client.get(&invoice_id).status, InvoiceStatus::Expired);
 }
@@ -521,8 +521,8 @@ fn test_expire_listing_unauthorized_caller_panics() {
     env.ledger()
         .set_timestamp(env.ledger().timestamp() + 7 * 24 * 60 * 60 + 1);
 
-    let stranger = Address::generate(&env);
-    client.expire_listing(&invoice_id, &stranger);
+    let _stranger = Address::generate(&env);
+    client.expire_listing(&invoice_id);
 }
 
 #[test]
@@ -536,7 +536,7 @@ fn test_expire_listing_early_panics() {
     env.ledger()
         .set_timestamp(env.ledger().timestamp() + 5 * 24 * 60 * 60);
 
-    client.expire_listing(&invoice_id, &issuer);
+    client.expire_listing(&invoice_id);
 }
 
 #[test]
@@ -549,7 +549,7 @@ fn test_expire_listing_wrong_status_panics() {
     env.ledger()
         .set_timestamp(env.ledger().timestamp() + 7 * 24 * 60 * 60 + 1);
 
-    client.expire_listing(&invoice_id, &issuer);
+    client.expire_listing(&invoice_id);
 }
 
 #[test]
@@ -565,7 +565,7 @@ fn test_expire_listing_configurable_window() {
     env.ledger()
         .set_timestamp(env.ledger().timestamp() + 86400 + 1);
 
-    let result = client.expire_listing(&invoice_id, &issuer);
+    let result = client.expire_listing(&invoice_id);
     assert!(result);
     assert_eq!(client.get(&invoice_id).status, InvoiceStatus::Expired);
 }
@@ -680,9 +680,9 @@ fn test_expire_listing_stranger_no_auth_panics() {
     env.ledger()
         .set_timestamp(env.ledger().timestamp() + 7 * 24 * 60 * 60 + 1);
 
-    let stranger = Address::generate(&env);
+    let _stranger = Address::generate(&env);
     // No mock auth for stranger — require_auth() will fail.
-    client.expire_listing(&invoice_id, &stranger);
+    client.expire_listing(&invoice_id);
 }
 
 // ── Issue #62: per-field getter tests ─────────────────────────────────────────
@@ -853,7 +853,7 @@ fn prop_expiry_window_bounds_are_respected_across_values() {
             client.list_for_financing(&id, &200);
             env.ledger()
                 .set_timestamp(env.ledger().timestamp() + window + 1);
-            let expired = client.expire_listing(&id, &issuer);
+            let expired = client.expire_listing(&id);
             prop_assert!(expired);
             prop_assert_eq!(client.get(&id).status, InvoiceStatus::Expired);
             Ok(())
