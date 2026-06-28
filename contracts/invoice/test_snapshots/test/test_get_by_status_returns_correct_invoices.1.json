@@ -2182,7 +2182,17 @@
             "data": {
               "vec": [
                 {
-                  "symbol": "Created"
+                  "vec": [
+                    {
+                      "symbol": "Created"
+                    }
+                  ]
+                },
+                {
+                  "u32": 0
+                },
+                {
+                  "u32": 10
                 }
               ]
             }
