@@ -455,6 +455,21 @@ fn test_mark_funded_succeeds_with_matching_asset() {
 }
 
 #[test]
+#[should_panic(expected = "Error(Contract, #15)")]
+fn test_mark_funded_rejects_unauthorized_pool() {
+    let (env, client, issuer, buyer, _, usdc) = setup();
+    let due_date = env.ledger().timestamp() + 86400;
+    let invoice_id = client.create(&issuer, &buyer, &1_000_000_000, &due_date, &usdc);
+    client.list_for_financing(&invoice_id, &200);
+
+    let pool = mock_pool_with_asset(&env, &usdc);
+    client.set_pool_contract(&pool);
+
+    let attacker_pool = mock_pool_with_asset(&env, &usdc);
+    client.mark_funded(&invoice_id, &attacker_pool, &usdc, &980_000_000);
+}
+
+#[test]
 fn test_create_invoice_with_xlm_asset() {
     let (env, client, issuer, buyer, _, _usdc) = setup();
     let due_date = env.ledger().timestamp() + 86400;

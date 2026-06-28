@@ -306,6 +306,15 @@ impl InvoiceContract {
         // ```
         pool_address.require_auth();
 
+        let expected_pool: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::PoolContract)
+            .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound));
+        if pool_address != expected_pool {
+            panic_with_error!(&env, InvoiceError::UnauthorizedPool);
+        }
+
         let inv_key = DataKey::Invoice(invoice_id.clone());
         let mut invoice: Invoice = env
             .storage()
