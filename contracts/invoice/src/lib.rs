@@ -746,14 +746,15 @@ impl InvoiceContract {
             .unwrap_or_else(|| panic_with_error!(&env, InvoiceError::NotFound))
     }
 
-    pub fn get_by_status(env: Env, status: InvoiceStatus) -> Vec<Invoice> {
+    pub fn get_by_status(env: Env, status: InvoiceStatus, offset: u32, limit: u32) -> Vec<Invoice> {
         let count: u32 = env
             .storage()
             .persistent()
             .get(&DataKey::StatusIndexCount(status as u32))
             .unwrap_or(0);
         let mut result: Vec<Invoice> = Vec::new(&env);
-        for i in 0..count {
+        let end = core::cmp::min(offset.saturating_add(limit), count);
+        for i in offset..end {
             let id: BytesN<32> = env
                 .storage()
                 .persistent()
@@ -771,14 +772,15 @@ impl InvoiceContract {
         result
     }
 
-    pub fn get_by_issuer(env: Env, address: Address) -> Vec<Invoice> {
+    pub fn get_by_issuer(env: Env, address: Address, offset: u32, limit: u32) -> Vec<Invoice> {
         let count: u32 = env
             .storage()
             .persistent()
             .get(&DataKey::IssuerIndexCount(address.clone()))
             .unwrap_or(0);
         let mut result: Vec<Invoice> = Vec::new(&env);
-        for i in 0..count {
+        let end = core::cmp::min(offset.saturating_add(limit), count);
+        for i in offset..end {
             let id: BytesN<32> = env
                 .storage()
                 .persistent()
@@ -794,14 +796,15 @@ impl InvoiceContract {
         result
     }
 
-    pub fn get_by_buyer(env: Env, address: Address) -> Vec<Invoice> {
+    pub fn get_by_buyer(env: Env, address: Address, offset: u32, limit: u32) -> Vec<Invoice> {
         let count: u32 = env
             .storage()
             .persistent()
             .get(&DataKey::BuyerIndexCount(address.clone()))
             .unwrap_or(0);
         let mut result: Vec<Invoice> = Vec::new(&env);
-        for i in 0..count {
+        let end = core::cmp::min(offset.saturating_add(limit), count);
+        for i in offset..end {
             let id: BytesN<32> = env
                 .storage()
                 .persistent()

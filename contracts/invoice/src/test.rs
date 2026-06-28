@@ -244,11 +244,11 @@ fn test_get_by_issuer_returns_correct_invoices() {
     client.create(&issuer, &buyer, &1_000_000_000, &due_date, &usdc);
     client.create(&issuer, &buyer, &2_000_000_000, &due_date, &usdc);
 
-    let invoices = client.get_by_issuer(&issuer);
+    let invoices = client.get_by_issuer(&issuer, &0, &10);
     assert_eq!(invoices.len(), 2);
 
     let other = Address::generate(&env);
-    let empty = client.get_by_issuer(&other);
+    let empty = client.get_by_issuer(&other, &0, &10);
     assert_eq!(empty.len(), 0);
 }
 
@@ -260,7 +260,7 @@ fn test_get_by_buyer_returns_correct_invoices() {
     client.create(&issuer, &buyer, &1_000_000_000, &due_date, &usdc);
     client.create(&issuer, &buyer, &2_000_000_000, &due_date, &usdc);
 
-    let invoices = client.get_by_buyer(&buyer);
+    let invoices = client.get_by_buyer(&buyer, &0, &10);
     assert_eq!(invoices.len(), 2);
 }
 
@@ -272,7 +272,7 @@ fn test_get_by_status_returns_correct_invoices() {
     client.create(&issuer, &buyer, &1_000_000_000, &due_date, &usdc);
     client.create(&issuer, &buyer, &2_000_000_000, &due_date, &usdc);
 
-    let created = client.get_by_status(&InvoiceStatus::Created);
+    let created = client.get_by_status(&InvoiceStatus::Created, &0, &10);
     assert_eq!(created.len(), 2);
 }
 
@@ -376,13 +376,13 @@ fn test_get_by_status_filters_correctly() {
     let id1 = client.create(&issuer, &buyer, &1_000_000_000, &due_date, &usdc);
     client.create(&issuer, &buyer, &2_000_000_000, &due_date, &usdc);
 
-    let created = client.get_by_status(&InvoiceStatus::Created);
+    let created = client.get_by_status(&InvoiceStatus::Created, &0, &10);
     assert_eq!(created.len(), 2);
 
     client.list_for_financing(&id1, &200);
-    let created = client.get_by_status(&InvoiceStatus::Created);
+    let created = client.get_by_status(&InvoiceStatus::Created, &0, &10);
     assert_eq!(created.len(), 1);
-    let listed = client.get_by_status(&InvoiceStatus::Listed);
+    let listed = client.get_by_status(&InvoiceStatus::Listed, &0, &10);
     assert_eq!(listed.len(), 1);
 }
 
