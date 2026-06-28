@@ -594,7 +594,11 @@ impl InvoiceContract {
         let mut args = Vec::new(&env);
         args.push_back(invoice_id.clone().into_val(&env));
         args.push_back(amount.into_val(&env));
-        let _: bool = env.invoke_contract(&pool, &Symbol::new(&env, "receive_repayment"), args);
+        let repayment_ok: bool =
+            env.invoke_contract(&pool, &Symbol::new(&env, "receive_repayment"), args);
+        if !repayment_ok {
+            panic_with_error!(&env, InvoiceError::RepaymentFailed);
+        }
 
         let mut updated = invoice;
         updated.repaid_amount += amount;
