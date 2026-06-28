@@ -598,7 +598,7 @@ impl InvoiceContract {
                 .persistent()
                 .extend_ttl(&inv_key, 100, 2_000_000);
             write_field_status(&env, &invoice_id, InvoiceStatus::Repaid);
-            
+
             self::move_status_index(
                 &env,
                 &invoice_id,

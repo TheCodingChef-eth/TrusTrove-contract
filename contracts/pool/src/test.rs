@@ -3,7 +3,8 @@
 use proptest::prelude::*;
 use proptest::test_runner::{Config as ProptestConfig, TestRunner};
 use soroban_sdk::{
-    contract, contractimpl, contracttype, testutils::Address as _, testutils::Ledger as _, Address, BytesN, Env,
+    contract, contractimpl, contracttype, testutils::Address as _, testutils::Ledger as _, Address,
+    BytesN, Env,
 };
 
 use crate::{PoolContract, PoolContractClient};
@@ -782,10 +783,10 @@ fn test_deposit_when_deposits_zero_but_shares_exist() {
 fn test_full_default_flow() {
     // 1. Setup all contracts
     let te = setup();
-    
+
     // 2. LP deposits funds
     te.pool.deposit(&te.lp, &100_000_000_000);
-    
+
     // 3. Create invoice & 4. List invoice
     let due_date = te.env.ledger().timestamp() + 86400;
     let invoice_id = te.invoice.create(
@@ -796,7 +797,7 @@ fn test_full_default_flow() {
         &te.usdc_id,
     );
     te.invoice.list_for_financing(&invoice_id, &200);
-    
+
     let before_fund_stats = te.pool.get_stats();
 
     // 5. Fund invoice
@@ -804,8 +805,11 @@ fn test_full_default_flow() {
 
     let funded_stats = te.pool.get_stats();
     // Verify invoice was funded
-    assert_eq!(funded_stats.active_invoice_count, before_fund_stats.active_invoice_count + 1);
-    
+    assert_eq!(
+        funded_stats.active_invoice_count,
+        before_fund_stats.active_invoice_count + 1
+    );
+
     // 6. Advance ledger time beyond due date
     te.env.ledger().set_timestamp(due_date + 1);
 
@@ -817,12 +821,21 @@ fn test_full_default_flow() {
     // Assertions
     // Pool state updates:
     // * TotalDeposits decreases by funded amount (9_800_000_000)
-    assert_eq!(after_default_stats.total_deposits, before_fund_stats.total_deposits - 9_800_000_000);
+    assert_eq!(
+        after_default_stats.total_deposits,
+        before_fund_stats.total_deposits - 9_800_000_000
+    );
     // * TotalFunded decreases (back to what it was before funding)
-    assert_eq!(after_default_stats.total_funded, before_fund_stats.total_funded);
+    assert_eq!(
+        after_default_stats.total_funded,
+        before_fund_stats.total_funded
+    );
     // * ActiveInvoiceCount decreases (back to what it was before funding)
-    assert_eq!(after_default_stats.active_invoice_count, before_fund_stats.active_invoice_count);
-    
+    assert_eq!(
+        after_default_stats.active_invoice_count,
+        before_fund_stats.active_invoice_count
+    );
+
     // Verify Escrow default handler executes and Funds return correctly.
     // The Escrow lock is automatically cleared when handle_default runs.
     // The pool accounting assertions above prove the funds were returned correctly to the pool.

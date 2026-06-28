@@ -213,7 +213,7 @@ impl EscrowContract {
             EscrowAction::ReleasedToPool,
             repayment_amount,
         );
-        
+
         if repayment_amount == record.amount {
             env.storage().persistent().remove(&key);
         } else {
@@ -221,7 +221,7 @@ impl EscrowContract {
             env.storage().persistent().set(&key, &record);
             env.storage().persistent().extend_ttl(&key, 100, 2_000_000);
         }
-        
+
         Self::extend_instance_ttl(&env);
         events::released_to_pool(&env, &invoice_id, &pool, repayment_amount);
         true

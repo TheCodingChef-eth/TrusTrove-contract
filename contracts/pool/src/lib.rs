@@ -484,7 +484,9 @@ impl PoolContract {
             data.remaining_funded -= principal_portion;
             data.remaining_face_value -= amount;
             env.storage().persistent().set(&funded_key, &data);
-            env.storage().persistent().extend_ttl(&funded_key, 100, 2_000_000);
+            env.storage()
+                .persistent()
+                .extend_ttl(&funded_key, 100, 2_000_000);
         }
 
         events::repayment_received(&env, &invoice_id, amount, yield_amount);
